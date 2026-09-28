@@ -1,9 +1,11 @@
 --[[
-    Hermez Library v0.2.2
-    Minimalist Black Theme UI Library for Roblox
-    + Animações + Mobile + Resize + Keybind + Hotkey + Notify Types
-    + FIX: conteúdo da aba carrega corretamente
---]]
+========================================================
+Hermez Library v0.2.3
+Minimalist Black Theme UI Library for Roblox
++ Animações + Mobile + Resize + Keybind + Hotkey + Notify Types
++ FIX: conflito de nomes que quebrava ao trocar de aba
+========================================================
+]]
 
 local Hermez = {}
 Hermez.__index = Hermez
@@ -58,6 +60,7 @@ local function create(className, properties)
 end
 
 local function tween(instance, time, properties, style, direction)
+    if typeof(instance) ~= "Instance" then return nil end
     local t = TweenService:Create(
         instance,
         TweenInfo.new(time, style or Enum.EasingStyle.Quad, direction or Enum.EasingDirection.Out),
@@ -514,9 +517,13 @@ function Hermez:Window(config)
         local t = tween(main, 0.2, {
             Size = UDim2.fromOffset(currentSize.X, 0),
         }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        t.Completed:Connect(function()
+        if t then
+            t.Completed:Connect(function()
+                main.Visible = false
+            end)
+        else
             main.Visible = false
-        end)
+        end
     end
 
     local function toggleWindow()
@@ -586,7 +593,7 @@ function Hermez:Window(config)
     end)
 
     --==========================================================
-    -- TAB (FIX v0.2.2: conteúdo carrega sempre)
+    -- TAB (FIX v0.2.3: nomes internos com _ para não colidir)
     --==========================================================
     function window:Tab(tabConfig)
         tabConfig = tabConfig or {}
@@ -616,7 +623,6 @@ function Hermez:Window(config)
             Parent = btn,
         })
 
-        -- Página: CanvasSize MANUAL (AutomaticCanvasSize desligado)
         local page = create("ScrollingFrame", {
             Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
@@ -640,7 +646,6 @@ function Hermez:Window(config)
             Parent = page,
         })
 
-        -- Recalcula canvas ao adicionar/remover/tamanho mudar
         local function updateCanvas()
             page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 16)
         end
@@ -648,26 +653,30 @@ function Hermez:Window(config)
         page.ChildAdded:Connect(function() task.defer(updateCanvas) end)
         page.ChildRemoved:Connect(function() task.defer(updateCanvas) end)
 
+        -- IMPORTANTE: usar _button, _label, _page (evita colisão com métodos)
         local tab = {
             Name = tabName,
-            Button = btn,
-            Label = btnLabel,
-            Page = page,
+            _button = btn,
+            _label = btnLabel,
+            _page = page,
             Window = window,
-            _updateCanvas = updateCanvas,
         }
 
         local function activate()
             for _, t in pairs(window.Tabs) do
-                if t.Page.Visible then
-                    t.Page.Visible = false
+                if t._page and t._page.Visible then
+                    t._page.Visible = false
                 end
-                tween(t.Button, 0.15, { BackgroundColor3 = Theme.BackgroundSecondary })
-                tween(t.Label, 0.15, { TextColor3 = Theme.TextDimmed })
+                if t._button then
+                    tween(t._button, 0.15, { BackgroundColor3 = Theme.BackgroundSecondary })
+                end
+                if t._label then
+                    tween(t._label, 0.15, { TextColor3 = Theme.TextDimmed })
+                end
             end
 
             page.Visible = true
-            updateCanvas() -- força recálculo ao mostrar
+            updateCanvas()
 
             tween(btn, 0.15, { BackgroundColor3 = Theme.BackgroundTertiary })
             tween(btnLabel, 0.15, { TextColor3 = Theme.Text })
@@ -1132,9 +1141,13 @@ function Hermez:Window(config)
                 opened = false
                 tween(arrowLabel, 0.2, { Rotation = 0 })
                 local t = tween(list, 0.2, { Size = UDim2.new(1, 0, 0, 0) })
-                t.Completed:Connect(function()
-                    if not opened then list.Visible = false end
-                end)
+                if t then
+                    t.Completed:Connect(function()
+                        if not opened then list.Visible = false end
+                    end)
+                else
+                    list.Visible = false
+                end
             end
 
             local function openList()
