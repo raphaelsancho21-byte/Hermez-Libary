@@ -1,7 +1,8 @@
 --[[
-    Hermez Library v0.2.1
+    Hermez Library v0.2.2
     Minimalist Black Theme UI Library for Roblox
     + Animações + Mobile + Resize + Keybind + Hotkey + Notify Types
+    + FIX: conteúdo da aba carrega corretamente
 --]]
 
 local Hermez = {}
@@ -256,15 +257,13 @@ local function createNotify(title, content, duration, nType)
 
     tween(notif, 0.35, { Position = UDim2.new(0, 0, 0, 0) }, Enum.EasingStyle.Back)
 
-    -- Barra lateral colorida (indicador do tipo)
-    local accent = create("Frame", {
+    create("Frame", {
         Size = UDim2.new(0, 3, 1, 0),
         BackgroundColor3 = typeData.Color,
         BorderSizePixel = 0,
         Parent = notif,
     })
 
-    -- Ícone
     local iconBg = create("Frame", {
         Size = UDim2.fromOffset(24, 24),
         Position = UDim2.new(0, 14, 0, 12),
@@ -282,7 +281,6 @@ local function createNotify(title, content, duration, nType)
         Parent = iconBg,
     })
 
-    -- Título
     create("TextLabel", {
         Size = UDim2.new(1, -50, 0, 18),
         Position = UDim2.new(0, 46, 0, 10),
@@ -296,7 +294,6 @@ local function createNotify(title, content, duration, nType)
         Parent = notif,
     })
 
-    -- Conteúdo
     create("TextLabel", {
         Size = UDim2.new(1, -56, 0, 30),
         Position = UDim2.new(0, 46, 0, 28),
@@ -311,7 +308,6 @@ local function createNotify(title, content, duration, nType)
         Parent = notif,
     })
 
-    -- Barra de progresso
     local progress = create("Frame", {
         Size = UDim2.new(1, 0, 0, 2),
         Position = UDim2.new(0, 0, 1, -2),
@@ -353,9 +349,7 @@ function Hermez:Window(config)
         Parent = getParent(),
     })
 
-    --==========================================================
-    -- BOTÃO MOBILE (flutuante grande) → aparece só em mobile
-    --==========================================================
+    -- Botão mobile
     local mobileBtn
     if IsMobile and showMobileBtn then
         mobileBtn = create("TextButton", {
@@ -373,15 +367,9 @@ function Hermez:Window(config)
         create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = mobileBtn })
         create("UIStroke", { Color = Theme.Border, Thickness = 1, Parent = mobileBtn })
         makeDraggable(mobileBtn, mobileBtn)
-
-        mobileBtn.MouseButton1Click:Connect(function()
-            -- placeholder, sobrescrito abaixo
-        end)
     end
 
-    --==========================================================
-    -- JANELA PRINCIPAL
-    --==========================================================
+    -- Janela principal
     local main = create("Frame", {
         Name = "Main",
         Size = UDim2.fromOffset(0, 0),
@@ -479,7 +467,7 @@ function Hermez:Window(config)
         Parent = tabList,
     })
 
-    -- Pages container (FIX: sem position animation)
+    -- Pages container
     local pages = create("Frame", {
         Name = "Pages",
         Size = UDim2.new(1, -160, 1, -50),
@@ -510,7 +498,7 @@ function Hermez:Window(config)
         function(w, h) currentSize = Vector2.new(w, h) end
     )
 
-    --============ ABRIR / FECHAR ============
+    -- Abrir/fechar
     local function openWindow()
         if window.Opened then return end
         window.Opened = true
@@ -539,12 +527,11 @@ function Hermez:Window(config)
     window.Close = closeWindow
     window.Toggle = toggleWindow
 
-    -- Abre com animação
     main.Size = UDim2.fromOffset(currentSize.X, 0)
     tween(main, 0.4, { Size = UDim2.fromOffset(currentSize.X, currentSize.Y) },
         Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
-    --============ HOTKEY GLOBAL ============
+    -- Hotkey global
     local hotkeyConn = UserInputService.InputBegan:Connect(function(input, processed)
         if processed then return end
         if isTextBoxFocused() then return end
@@ -559,7 +546,6 @@ function Hermez:Window(config)
         window.Hotkey = keyCode
     end
 
-    --============ MOBILE BUTTON CLICK ============
     if mobileBtn then
         mobileBtn.MouseButton1Click:Connect(toggleWindow)
         mobileBtn.MouseEnter:Connect(function()
@@ -570,7 +556,7 @@ function Hermez:Window(config)
         end)
     end
 
-    --============ MINIMIZE / CLOSE ============
+    -- Minimize
     local minimized = false
     minimizeBtn.MouseButton1Click:Connect(function()
         minimized = not minimized
@@ -600,7 +586,7 @@ function Hermez:Window(config)
     end)
 
     --==========================================================
-    -- TAB (FIX: conteúdo não some mais ao clicar)
+    -- TAB (FIX v0.2.2: conteúdo carrega sempre)
     --==========================================================
     function window:Tab(tabConfig)
         tabConfig = tabConfig or {}
@@ -630,8 +616,7 @@ function Hermez:Window(config)
             Parent = btn,
         })
 
-        -- Página: SEMPRE visível em layout, mas escondida via Visible.
-        -- A animação é SÓ de transparência — não mexe em Position/Size.
+        -- Página: CanvasSize MANUAL (AutomaticCanvasSize desligado)
         local page = create("ScrollingFrame", {
             Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
@@ -639,12 +624,12 @@ function Hermez:Window(config)
             ScrollBarThickness = 4,
             ScrollBarImageColor3 = Theme.Border,
             CanvasSize = UDim2.new(0, 0, 0, 0),
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            AutomaticCanvasSize = Enum.AutomaticSize.None,
             ScrollingDirection = Enum.ScrollingDirection.Y,
             Visible = false,
             Parent = pages,
         })
-        create("UIListLayout", {
+        local layout = create("UIListLayout", {
             Padding = UDim.new(0, 8),
             SortOrder = Enum.SortOrder.LayoutOrder,
             Parent = page,
@@ -655,12 +640,21 @@ function Hermez:Window(config)
             Parent = page,
         })
 
+        -- Recalcula canvas ao adicionar/remover/tamanho mudar
+        local function updateCanvas()
+            page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 16)
+        end
+        layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+        page.ChildAdded:Connect(function() task.defer(updateCanvas) end)
+        page.ChildRemoved:Connect(function() task.defer(updateCanvas) end)
+
         local tab = {
             Name = tabName,
             Button = btn,
             Label = btnLabel,
             Page = page,
             Window = window,
+            _updateCanvas = updateCanvas,
         }
 
         local function activate()
@@ -671,7 +665,10 @@ function Hermez:Window(config)
                 tween(t.Button, 0.15, { BackgroundColor3 = Theme.BackgroundSecondary })
                 tween(t.Label, 0.15, { TextColor3 = Theme.TextDimmed })
             end
+
             page.Visible = true
+            updateCanvas() -- força recálculo ao mostrar
+
             tween(btn, 0.15, { BackgroundColor3 = Theme.BackgroundTertiary })
             tween(btnLabel, 0.15, { TextColor3 = Theme.Text })
             window.CurrentTab = tab
@@ -1210,7 +1207,7 @@ function Hermez:Window(config)
         end
 
         --======================================================
-        -- KEYBIND (agora com Enable/Disable)
+        -- KEYBIND
         --======================================================
         function tab:Keybind(kbConfig)
             kbConfig = kbConfig or {}
@@ -1218,13 +1215,12 @@ function Hermez:Window(config)
             local default = kbConfig.Default or Enum.KeyCode.Unknown
             local callback = kbConfig.Callback or function() end
             local flag = kbConfig.Flag
-            local enabled = kbConfig.Enabled ~= false -- ATIVADO por padrão
+            local enabled = kbConfig.Enabled ~= false
 
             local currentKey = default
             local listening = false
 
             local container = create("Frame", {
-                Size = UDim2.new(1, 0, IsMobile and 0, 0, 0, 32),
                 Size = UDim2.new(1, 0, 0, 32),
                 BackgroundColor3 = Theme.BackgroundSecondary,
                 Parent = page,
@@ -1232,7 +1228,7 @@ function Hermez:Window(config)
             create("UICorner", { CornerRadius = Theme.CornerRadius, Parent = container })
             create("UIStroke", { Color = Theme.Border, Thickness = 1, Parent = container })
 
-            local nameLabel = create("TextLabel", {
+            create("TextLabel", {
                 Size = UDim2.new(1, -130, 1, 0),
                 Position = UDim2.new(0, 12, 0, 0),
                 BackgroundTransparency = 1,
@@ -1245,7 +1241,6 @@ function Hermez:Window(config)
                 Parent = container,
             })
 
-            -- Toggle Enable/Disable (ON/OFF)
             local enableBtn = create("TextButton", {
                 Size = UDim2.fromOffset(34, 18),
                 Position = UDim2.new(1, -108, 0.5, -9),
@@ -1263,7 +1258,6 @@ function Hermez:Window(config)
             })
             create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = enableDot })
 
-            -- Botão de tecla
             local keyBtn = create("TextButton", {
                 Size = UDim2.fromOffset(50, 20),
                 Position = UDim2.new(1, -62, 0.5, -10),
@@ -1301,10 +1295,7 @@ function Hermez:Window(config)
             end
 
             updateEnableVisual()
-
-            enableBtn.MouseButton1Click:Connect(function()
-                setEnabled(not enabled)
-            end)
+            enableBtn.MouseButton1Click:Connect(function() setEnabled(not enabled) end)
 
             local function stopListening()
                 listening = false
@@ -1337,7 +1328,6 @@ function Hermez:Window(config)
                 end
             end)
 
-            -- Captura tecla
             local captureConn = UserInputService.InputBegan:Connect(function(input, processed)
                 if not listening then return end
                 if input.UserInputType == Enum.UserInputType.Keyboard then
@@ -1354,7 +1344,6 @@ function Hermez:Window(config)
             end)
             table.insert(window._connections, captureConn)
 
-            -- Dispara tecla (só se enabled = true)
             local pressConn = UserInputService.InputBegan:Connect(function(input, processed)
                 if processed then return end
                 if isTextBoxFocused() then return end
@@ -1371,7 +1360,6 @@ function Hermez:Window(config)
                 window.Flags[flag .. "_enabled"] = enabled
             end
 
-            -- Botões de atalho rápido mobile
             if IsMobile then
                 container.Size = UDim2.new(1, 0, 0, 58)
                 local mobileRow = create("Frame", {
@@ -1446,7 +1434,7 @@ function Hermez:Window(config)
     end
 
     --==========================================================
-    -- API PÚBLICA DA WINDOW
+    -- API PÚBLICA
     --==========================================================
     function window:Destroy()
         for _, conn in ipairs(window._connections) do
