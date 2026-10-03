@@ -1,6 +1,6 @@
 --[[
 ========================================================
-Hermez Library v0.2.3
+Hermez Library v0.2.4 - Atualize a cada Modify, de 0.0.1 em 0.0.1
 Minimalist Black Theme UI Library for Roblox
 + Animações + Mobile + Resize + Keybind + Hotkey + Notify Types
 + FIX: conflito de nomes que quebrava ao trocar de aba
@@ -15,6 +15,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
@@ -45,7 +46,7 @@ local NotifyTypes = {
     info    = { Color = Theme.Info,    Icon = "i" },
     success = { Color = Theme.Success, Icon = "✓" },
     warning = { Color = Theme.Warning, Icon = "!" },
-    error   = { Color = Theme.Danger,  Icon = "×" },
+    error   = { Color = Theme.Danger,  Icon = "X" },
 }
 
 --==============================================================
@@ -203,6 +204,8 @@ local function makeResizable(main, getMinSize, getMaxSize, onResize)
             tween(grip, 0.15, { TextColor3 = Theme.TextDimmed })
         end
     end)
+
+    return handle
 end
 
 --==============================================================
@@ -479,19 +482,6 @@ function Hermez:Window(config)
         ClipsDescendants = true,
         Parent = main,
     })
-    local pageLayout = create("UIPageLayout", {
-        Name = "PageLayout",
-        FillDirection = Enum.FillDirection.Horizontal,
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        EasingStyle = Enum.EasingStyle.Exponential,
-        EasingDirection = Enum.EasingDirection.Out,
-        TweenTime = 0.25,
-        ScrollWheelInputEnabled = false,
-        GamepadInputEnabled = false,
-        TouchInputEnabled = false,
-        Parent = pages,
-    })
-
     local window = {
         Gui = gui,
         Main = main,
@@ -502,16 +492,24 @@ function Hermez:Window(config)
         Hotkey = hotkey,
         Opened = true,
     }
+    window._transitionBlur = create("BlurEffect", {
+        Name = gui.Name .. "_TabBlur",
+        Size = 0,
+        Parent = Lighting,
+    })
+    window._tabTweens = {}
 
     makeDraggable(main, topbar)
 
     local currentSize = Vector2.new(size.X.Offset, size.Y.Offset)
-    makeResizable(
+    local minimized = false
+    local resizeHandle = makeResizable(
         main,
         function() return minSize end,
         function() return maxSize end,
         function(w, h) currentSize = Vector2.new(w, h) end
     )
+    window._resizeHandle = resizeHandle
 
     -- Abrir/fechar
     local function openWindow()
@@ -519,7 +517,7 @@ function Hermez:Window(config)
         window.Opened = true
         main.Visible = true
         tween(main, 0.35, {
-            Size = UDim2.fromOffset(currentSize.X, currentSize.Y),
+            Size = UDim2.fromOffset(currentSize.X, minimized and 40 or currentSize.Y),
         }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     end
 
@@ -541,6 +539,32 @@ function Hermez:Window(config)
     local function toggleWindow()
         if window.Opened then closeWindow() else openWindow() end
     end
+
+    local function setMinimized(value)
+        if minimized == value then return end
+        minimized = value
+        if minimized then
+            minimizeBtn.Text = "□"
+            sidebar.Visible = false
+            pages.Visible = false
+            resizeHandle.Visible = false
+            tween(main, 0.5, {
+                Size = UDim2.fromOffset(currentSize.X, 40),
+            }, Enum.EasingStyle.Exponential)
+        else
+            minimizeBtn.Text = "−"
+            sidebar.Visible = true
+            pages.Visible = true
+            resizeHandle.Visible = true
+            tween(main, 0.5, {
+                Size = UDim2.fromOffset(currentSize.X, currentSize.Y),
+            }, Enum.EasingStyle.Exponential)
+        end
+    end
+
+    window.Minimize = function() setMinimized(true) end
+    window.Maximize = function() setMinimized(false) end
+    window.ToggleSize = function() setMinimized(not minimized) end
 
     window.Open = openWindow
     window.Close = closeWindow
@@ -576,16 +600,8 @@ function Hermez:Window(config)
     end
 
     -- Minimize
-    local minimized = false
     minimizeBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        if minimized then
-            tween(main, 0.3, { Size = UDim2.fromOffset(main.AbsoluteSize.X, 40) })
-        else
-            tween(main, 0.3, {
-                Size = UDim2.fromOffset(main.AbsoluteSize.X, currentSize.Y),
-            }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-        end
+        setMinimized(not minimized)
     end)
     minimizeBtn.MouseEnter:Connect(function()
         tween(minimizeBtn, 0.15, { BackgroundColor3 = Theme.Border })
@@ -664,8 +680,9 @@ function Hermez:Window(config)
             CanvasSize = UDim2.new(0, 0, 0, 0),
             AutomaticCanvasSize = Enum.AutomaticSize.None,
             ScrollingDirection = Enum.ScrollingDirection.Y,
-            Visible = true,
+            Visible = false,
             LayoutOrder = #window.Tabs + 1,
+            Position = UDim2.new(0, 0, 0, 0),
             Parent = pages,
         })
         local layout = create("UIListLayout", {
@@ -699,6 +716,25 @@ function Hermez:Window(config)
         local function activate()
             if not page.Parent then return end
 
+            local previousTab = window.CurrentTab
+            if previousTab == tab then return end
+
+            local targetIndex, previousIndex
+            for index, otherTab in ipairs(window.Tabs) do
+                if otherTab == tab then targetIndex = index end
+                if otherTab == previousTab then previousIndex = index end
+            end
+
+            window._transitionId = (window._transitionId or 0) + 1
+            local transitionId = window._transitionId
+            for _, activeTween in ipairs(window._tabTweens) do
+                pcall(function() activeTween:Cancel() end)
+            end
+            table.clear(window._tabTweens)
+            if window._blurTween then
+                pcall(function() window._blurTween:Cancel() end)
+            end
+
             for _, otherTab in ipairs(window.Tabs) do
                 local selected = otherTab == tab
                 if otherTab._button then
@@ -716,13 +752,55 @@ function Hermez:Window(config)
                         ImageColor3 = selected and Theme.Text or Theme.TextDimmed,
                     })
                 end
+                if otherTab ~= previousTab and otherTab ~= tab and otherTab._page then
+                    otherTab._page.Visible = false
+                    otherTab._page.Position = UDim2.new(0, 0, 0, 0)
+                end
             end
 
-            if pageLayout.CurrentPage ~= page then
-                pageLayout:JumpTo(page)
+            if not previousTab then
+                page.Position = UDim2.new(0, 0, 0, 0)
+                page.Visible = true
+                window.CurrentTab = tab
+                updateCanvas()
+                return
+            end
+
+            local movingDown = targetIndex > previousIndex
+            local enteringOffset = movingDown and -1 or 1
+            local exitingOffset = -enteringOffset
+            local previousPage = previousTab._page
+
+            previousPage.Position = UDim2.new(0, 0, 0, 0)
+            previousPage.Visible = true
+            page.Position = UDim2.new(0, 0, enteringOffset, 0)
+            page.Visible = true
+            window.CurrentTab = tab
+
+            table.insert(window._tabTweens, tween(previousPage, 0.32, {
+                Position = UDim2.new(0, 0, exitingOffset, 0),
+            }, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut))
+            local pageTween = tween(page, 0.32, {
+                Position = UDim2.new(0, 0, 0, 0),
+            }, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut)
+            table.insert(window._tabTweens, pageTween)
+
+            window._blurTween = tween(window._transitionBlur, 0.12, { Size = 12 })
+            task.delay(0.12, function()
+                if window._transitionId == transitionId and window._transitionBlur.Parent then
+                    window._blurTween = tween(window._transitionBlur, 0.22, { Size = 0 })
+                end
+            end)
+
+            if pageTween then
+                pageTween.Completed:Connect(function()
+                    if window._transitionId ~= transitionId then return end
+                    previousPage.Visible = false
+                    previousPage.Position = UDim2.new(0, 0, 0, 0)
+                    page.Position = UDim2.new(0, 0, 0, 0)
+                end)
             end
             updateCanvas()
-            window.CurrentTab = tab
         end
 
         tab.Select = activate
@@ -1496,6 +1574,15 @@ function Hermez:Window(config)
     function window:Destroy()
         for _, conn in ipairs(window._connections) do
             pcall(function() conn:Disconnect() end)
+        end
+        for _, activeTween in ipairs(window._tabTweens) do
+            pcall(function() activeTween:Cancel() end)
+        end
+        if window._blurTween then
+            pcall(function() window._blurTween:Cancel() end)
+        end
+        if window._transitionBlur then
+            window._transitionBlur:Destroy()
         end
         gui:Destroy()
     end
