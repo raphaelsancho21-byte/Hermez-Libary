@@ -479,6 +479,18 @@ function Hermez:Window(config)
         ClipsDescendants = true,
         Parent = main,
     })
+    local pageLayout = create("UIPageLayout", {
+        Name = "PageLayout",
+        FillDirection = Enum.FillDirection.Horizontal,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        EasingStyle = Enum.EasingStyle.Exponential,
+        EasingDirection = Enum.EasingDirection.Out,
+        TweenTime = 0.25,
+        ScrollWheelInputEnabled = false,
+        GamepadInputEnabled = false,
+        TouchInputEnabled = false,
+        Parent = pages,
+    })
 
     local window = {
         Gui = gui,
@@ -598,6 +610,7 @@ function Hermez:Window(config)
     function window:Tab(tabConfig)
         tabConfig = tabConfig or {}
         local tabName = tabConfig.Name or "Tab"
+        local icon = tabConfig.Icon or tabConfig.Image
 
         local btn = create("TextButton", {
             Size = UDim2.new(1, 0, 0, 30),
@@ -608,9 +621,27 @@ function Hermez:Window(config)
         })
         create("UICorner", { CornerRadius = UDim.new(0, 5), Parent = btn })
 
+        local iconImage
+        if icon ~= nil and icon ~= 0 and icon ~= "" then
+            local image = icon
+            if typeof(image) == "number" or (typeof(image) == "string" and tonumber(image)) then
+                image = "rbxassetid://" .. tostring(image)
+            end
+            iconImage = create("ImageLabel", {
+                Size = UDim2.fromOffset(16, 16),
+                Position = UDim2.new(0, 8, 0.5, -8),
+                BackgroundTransparency = 1,
+                Image = image,
+                ImageColor3 = Theme.TextDimmed,
+                ScaleType = Enum.ScaleType.Fit,
+                ZIndex = 2,
+                Parent = btn,
+            })
+        end
+
         local btnLabel = create("TextLabel", {
-            Size = UDim2.new(1, -14, 1, 0),
-            Position = UDim2.new(0, 12, 0, 0),
+            Size = UDim2.new(1, iconImage and -34 or -14, 1, 0),
+            Position = UDim2.new(0, iconImage and 30 or 12, 0, 0),
             BackgroundTransparency = 1,
             Text = tabName,
             TextColor3 = Theme.TextDimmed,
@@ -624,6 +655,7 @@ function Hermez:Window(config)
         })
 
         local page = create("ScrollingFrame", {
+            Name = tabName,
             Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
@@ -632,7 +664,8 @@ function Hermez:Window(config)
             CanvasSize = UDim2.new(0, 0, 0, 0),
             AutomaticCanvasSize = Enum.AutomaticSize.None,
             ScrollingDirection = Enum.ScrollingDirection.Y,
-            Visible = false,
+            Visible = true,
+            LayoutOrder = #window.Tabs + 1,
             Parent = pages,
         })
         local layout = create("UIListLayout", {
@@ -658,30 +691,41 @@ function Hermez:Window(config)
             Name = tabName,
             _button = btn,
             _label = btnLabel,
+            _icon = iconImage,
             _page = page,
             Window = window,
         }
 
         local function activate()
-            for _, t in pairs(window.Tabs) do
-                if t._page and t._page.Visible then
-                    t._page.Visible = false
+            if not page.Parent then return end
+
+            for _, otherTab in ipairs(window.Tabs) do
+                local selected = otherTab == tab
+                if otherTab._button then
+                    tween(otherTab._button, 0.15, {
+                        BackgroundColor3 = selected and Theme.BackgroundTertiary or Theme.BackgroundSecondary,
+                    })
                 end
-                if t._button then
-                    tween(t._button, 0.15, { BackgroundColor3 = Theme.BackgroundSecondary })
+                if otherTab._label then
+                    tween(otherTab._label, 0.15, {
+                        TextColor3 = selected and Theme.Text or Theme.TextDimmed,
+                    })
                 end
-                if t._label then
-                    tween(t._label, 0.15, { TextColor3 = Theme.TextDimmed })
+                if otherTab._icon then
+                    tween(otherTab._icon, 0.15, {
+                        ImageColor3 = selected and Theme.Text or Theme.TextDimmed,
+                    })
                 end
             end
 
-            page.Visible = true
+            if pageLayout.CurrentPage ~= page then
+                pageLayout:JumpTo(page)
+            end
             updateCanvas()
-
-            tween(btn, 0.15, { BackgroundColor3 = Theme.BackgroundTertiary })
-            tween(btnLabel, 0.15, { TextColor3 = Theme.Text })
             window.CurrentTab = tab
         end
+
+        tab.Select = activate
 
         btn.MouseButton1Click:Connect(activate)
         btn.MouseEnter:Connect(function()
@@ -1458,6 +1502,16 @@ function Hermez:Window(config)
 
     function window:GetFlags()
         return window.Flags
+    end
+
+    function window:SelectTab(target)
+        for _, tab in ipairs(window.Tabs) do
+            if tab == target or tab.Name == target then
+                tab:Select()
+                return true
+            end
+        end
+        return false
     end
 
     function window:SetMobileButtonVisible(visible)
